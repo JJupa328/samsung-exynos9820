@@ -96,26 +96,30 @@ jobs:
           # 1. 작업용 디렉토리 생성
           mkdir -p mkbootimg_src/gki
           
-          # 2. GitHub AOSP 미러에서 mkbootimg 관련 핵심 파일들만 정밀 다운로드 (curl 사용)
+          # 2. GitHub AOSP 미러에서 mkbootimg 관련 파일 정밀 다운로드
           curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/mkbootimg.py" -o mkbootimg_src/mkbootimg.py
           curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/gki/gki.py" -o mkbootimg_src/gki/gki.py
           curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/gki/__init__.py" -o mkbootimg_src/gki/__init__.py
-
-          # 3. 만약 메인 저장소 구조가 다를 경우를 대비한 예비 다운로드 (구조 검증)
+          
+          # 3. 만약 파일이 비어있다면 다른 경로 구조에서 예비 다운로드
           if [ ! -s "mkbootimg_src/mkbootimg.py" ]; then
             curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg.py" -o mkbootimg_src/mkbootimg.py
             curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/gki.py" -o mkbootimg_src/gki/gki.py
           fi
           
-          # 4. mkbootimg.py 실행 권한 부여 및 시스템 경로 배치
-          chmod +x mkbootimg_src/mkbootimg.py
-          sudo cp mkbootimg_src/mkbootimg.py /usr/local/bin/mkbootimg
+          # 4. 핵심 수정: Exec format error를 방지하기 위해 파일 맨 위에 python3 쉬뱅(Shebang) 선언 강제 주입
+          echo '#!/usr/bin/env python3' > ./mkbootimg
+          cat mkbootimg_src/mkbootimg.py >> ./mkbootimg
           
-          # 5. gki 패키지 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
+          # 5. 실행 권한 부여 및 시스템 경로 배치
+          chmod +x ./mkbootimg
+          sudo mv ./mkbootimg /usr/local/bin/mkbootimg
+          
+          # 6. gki 패키지 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
           SITE_PKG=$(python -c 'import site; print(site.getsitepackages()[0])')
           sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
           
-          # 6. 임시 파일 청소
+          # 7. 임시 파일 청소
           rm -rf mkbootimg_src
 
       - name: Install mkdtboimg
