@@ -7,6 +7,23 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
     steps:
+      - name: Free Disk Space (강제 디스크 공간 확보)
+        run: |
+          echo "==== 빌드 전 디스크 용량 확인 ===="
+          df -h
+          
+          # GitHub Actions 기본 가상 머신에 내장된 무거운 패키지들 강제 삭제
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/libexec/docker/cli-plugins/docker-buildx
+          
+          # 아파트 패키지 정리 및 가비지 컬렉션
+          sudo apt-get clean
+          
+          echo "==== 디스크 비우기 완료 후 용량 확인 ===="
+          df -h
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
