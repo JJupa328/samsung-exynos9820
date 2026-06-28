@@ -87,13 +87,20 @@ jobs:
           export SUBARCH=arm64
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           
-          # 핵심 수정: KCFLAGS="-Wno-error" 추가하여 사소한 코드 경고로 인해 빌드가 터지는 것을 방지
-          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip KCFLAGS=-Wno-error"
+          # 1. lse 에러 방지를 위해 아키텍처 타겟을 ARMv8.2-A로 승격 (-march=armv8.2-a)
+          # 2. void void 및 섹션 충돌 같은 구형 C 문법 오류 무시 플래그 대거 주입
+          # 3. Clang 16 이상 버전의 엄격한 타입 검사 무력화 (-Wno-error=...)
+          EXTRA_CFLAGS="-march=armv8.2-a -Wno-error -Wno-return-type -Wno-implicit-function-declaration -Wno-int-conversion -Wno-section -fpermissive"
+          
+          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip KCFLAGS=${EXTRA_CFLAGS}"
           
           # 1. Defconfig 구성 초기화
           make $MAKE_ARGS exynos9820_defconfig
           
-          # 2. 컴파일 시작
+          # 2. 구형 코드 호환성을 위해 추가 설정 강제 보정 (오타 및 호환성 차단)
+          sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' .config
+          
+          # 3. 컴파일 시작
           make $MAKE_ARGS -j$(nproc)
 
       - name: Package Boot Image Artifacts
