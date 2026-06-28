@@ -93,27 +93,29 @@ jobs:
 
       - name: Install mkbootimg
         run: |
-          # 1. 구글 서버 대신 GitHub 공식 미러에서 최신 소스를 얕게(depth 1) 복사
-          git clone --depth 1 https://github.com/aosp-mirror/platform_system_tools_mkbootimg.git mkbootimg_src
+          # 1. 작업용 디렉토리 생성
+          mkdir -p mkbootimg_src/gki
           
-          # 2. 구조에 맞춰 mkbootimg.py 파일 추출 및 시스템 경로 배치
-          if [ -f "mkbootimg_src/mkbootimg.py" ]; then
-            cp mkbootimg_src/mkbootimg.py ./mkbootimg.py
-          else
-            cp mkbootimg_src/mkbootimg/mkbootimg.py ./mkbootimg.py
+          # 2. GitHub AOSP 미러에서 mkbootimg 관련 핵심 파일들만 정밀 다운로드 (curl 사용)
+          curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/mkbootimg.py" -o mkbootimg_src/mkbootimg.py
+          curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/gki/gki.py" -o mkbootimg_src/gki/gki.py
+          curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/gki/__init__.py" -o mkbootimg_src/gki/__init__.py
+
+          # 3. 만약 메인 저장소 구조가 다를 경우를 대비한 예비 다운로드 (구조 검증)
+          if [ ! -s "mkbootimg_src/mkbootimg.py" ]; then
+            curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg.py" -o mkbootimg_src/mkbootimg.py
+            curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/gki.py" -o mkbootimg_src/gki/gki.py
           fi
-          chmod +x mkbootimg.py
-          sudo mv mkbootimg.py /usr/local/bin/mkbootimg
           
-          # 3. gki 패키지 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
+          # 4. mkbootimg.py 실행 권한 부여 및 시스템 경로 배치
+          chmod +x mkbootimg_src/mkbootimg.py
+          sudo cp mkbootimg_src/mkbootimg.py /usr/local/bin/mkbootimg
+          
+          # 5. gki 패키지 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
           SITE_PKG=$(python -c 'import site; print(site.getsitepackages()[0])')
-          if [ -d "mkbootimg_src/gki" ]; then
-            sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
-          else
-            sudo cp -r mkbootimg_src/mkbootimg/gki "$SITE_PKG/"
-          fi
+          sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
           
-          # 4. 임시로 사용한 소스 폴더 제거
+          # 6. 임시 파일 청소
           rm -rf mkbootimg_src
 
       - name: Install mkdtboimg
