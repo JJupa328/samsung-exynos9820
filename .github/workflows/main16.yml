@@ -1,0 +1,112 @@
+name: Build Android 16 LineageOS Docker Kernel
+
+on:
+  workflow_dispatch: # 깃허브 웹에서 수동으로 빌드 버튼을 누를 수 있게 합니다.
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libtinfo-dev python3 wget curl tar
+          
+      - name: Download Google Clang Toolchain
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/clang
+          # 안드로이드 16 커널 컴파일을 위한 공식 Google Clang 툴체인 다운로드
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz -O clang.tar.gz
+          tar -xzf clang.tar.gz -C $GITHUB_WORKSPACE/clang
+          rm -rf clang.tar.gz
+
+      - name: Clone LineageOS 23.2 Kernel Source
+        run: |
+          # 갤럭시 S10+ 엑시노스 9820 공식 리니지OS 23.2 브랜치 클론
+          git clone https://github.com/LineageOS/android_kernel_samsung_exynos9820.git -b lineage-23.2 --depth=1 kernel-src
+
+      - name: Inject Docker Config Flags
+        run: |
+          cd kernel-src
+          DEFCONFIG_PATH="arch/arm64/configs/exynos9820_defconfig"
+          
+          echo "==== Injecting Docker Required Defconfig Flags ===="
+          
+          # 네임스페이스 및 기기 제어 (도커 필수)
+          echo "CONFIG_NAMESPACES=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NET_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_PID_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_IPC_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_UTS_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_USER_NS=y" >> $DEFCONFIG_PATH
+          
+          # 제어 그룹 (CGroups) 가상화 관련
+          echo "CONFIG_CGROUPS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_CPUACCT=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_DEVICE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_FREEZER=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_SCHED=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CPUSETS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_MEMCG=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_MEMCG_SWAP=y" >> $DEFCONFIG_PATH
+          
+          # 스토리지 아키텍처 및 네트워크 가상화
+          echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_VETH=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_BRIDGE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_KEYS=y" >> $DEFCONFIG_PATH
+          
+          # 방화벽 및 네트워크 패킷 필터링 (iptables / 마스커레이드)
+          echo "CONFIG_IP_NF_FILTER=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_IP_NF_TARGET_MASQUERADE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NETFILTER_XT_MATCH_COMMENT=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NF_NAT=y" >> $DEFCONFIG_PATH
+          
+          echo "==== Defconfig Modification Done! ===="
+
+      - name: Compile Kernel
+        run: |
+          cd kernel-src
+          
+          # 환경변수 선언: 아키텍처 및 크로스 컴파일 경로 세팅
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          
+          # 빌드 아규먼트 설정 (Clang 및 LLVM 도구 체인 연동)
+          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip"
+          
+          # 1. Defconfig 구성 초기화
+          make $MAKE_ARGS exynos9820_defconfig
+          
+          # 2. 컴파일 시작 (코어 수 계산하여 초고속 빌드)
+          make $MAKE_ARGS -j$(nproc)
+
+      - name: Package Boot Image Artifacts
+        run: |
+          mkdir -p output
+          # 빌드가 성공하면 나오는 핵심 바이너리 추출
+          cp kernel-src/arch/arm64/boot/Image output/boot.img
+          if [ -f "kernel-src/arch/arm64/boot/dts/exynos/exynos9820.dtbo" ]; then
+            cp kernel-src/arch/arm64/boot/dts/exynos/exynos9820.dtbo output/dtbo.img
+          fi
+          
+          cd output
+          tar -cvf docker-kernel-beyond2lte.tar boot.img $(ls dtbo.img 2>/dev/null)
+
+      - name: Upload Kernel Tar to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Docker-Kernel-Lineage23.2
+          path: output/docker-kernel-beyond2lte.tar
