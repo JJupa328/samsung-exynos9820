@@ -93,14 +93,10 @@ jobs:
 
       - name: Install mkbootimg
         run: |
-          # 1. 최신 main 브랜치 아카이브 다운로드
-          wget -q https://android.googlesource.com/platform/system/tools/mkbootimg/+archive/refs/heads/main.tar.gz -O mkbootimg.tar.gz
+          # 1. 구글 서버 대신 GitHub 공식 미러에서 최신 소스를 얕게(depth 1) 복사
+          git clone --depth 1 https://github.com/aosp-mirror/platform_system_tools_mkbootimg.git mkbootimg_src
           
-          # 2. 임시 폴더 생성 및 압축 해제
-          mkdir -p mkbootimg_src
-          tar -xzf mkbootimg.tar.gz -C mkbootimg_src
-          
-          # 3. mkbootimg.py 파일 위치 찾아서 추출 및 시스템 경로로 이동
+          # 2. 구조에 맞춰 mkbootimg.py 파일 추출 및 시스템 경로 배치
           if [ -f "mkbootimg_src/mkbootimg.py" ]; then
             cp mkbootimg_src/mkbootimg.py ./mkbootimg.py
           else
@@ -109,7 +105,7 @@ jobs:
           chmod +x mkbootimg.py
           sudo mv mkbootimg.py /usr/local/bin/mkbootimg
           
-          # 4. gki 패키지 폴더 위치 찾아서 파이썬 사이트 패키지 경로로 통째로 복사
+          # 3. gki 패키지 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
           SITE_PKG=$(python -c 'import site; print(site.getsitepackages()[0])')
           if [ -d "mkbootimg_src/gki" ]; then
             sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
@@ -117,8 +113,8 @@ jobs:
             sudo cp -r mkbootimg_src/mkbootimg/gki "$SITE_PKG/"
           fi
           
-          # 5. 작업용 임시 파일 정리
-          rm -rf mkbootimg.tar.gz mkbootimg_src
+          # 4. 임시로 사용한 소스 폴더 제거
+          rm -rf mkbootimg_src
 
       - name: Install mkdtboimg
         run: |
