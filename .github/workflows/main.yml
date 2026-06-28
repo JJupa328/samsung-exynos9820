@@ -90,24 +90,28 @@ jobs:
 
       - name: Kernel Build
         run: ./cruelbuild :build
-
+        
       - name: Install mkbootimg
         run: |
-          # 1. PyPI에서 공식 mkbootimg 패키지 및 종속성(gki) 초고속 설치
-          python3 -m pip install --upgrade pip
-          python3 -m pip install mkbootimg
+          # 1. 구조가 안정적인 Android 12 공식 태그에서 mkbootimg 소스 코드 다운로드
+          wget -q https://android.googlesource.com/platform/system/tools/mkbootimg/+archive/refs/tags/android-12.1.0_r4.tar.gz -O mkbootimg.tar.gz
           
-          # 2. 설치된 패키지 위치 확인 후 /usr/local/bin/mkbootimg로 심볼릭 링크(연결) 생성
-          # 'mkbootimg' 명령어가 단일 실행 파일로 호출될 수 있도록 환경 보정
-          MKBOOTIMG_PATH=$(which mkbootimg || echo "$HOME/.local/bin/mkbootimg")
+          # 2. 임시 폴더에 압축 해제
+          mkdir -p mkbootimg_src
+          tar -xzf mkbootimg.tar.gz -C mkbootimg_src
           
-          if [ -f "$MKBOOTIMG_PATH" ]; then
-            sudo ln -sf "$MKBOOTIMG_PATH" /usr/local/bin/mkbootimg
-          else
-            # 만약 pip가 스크립트 형태로만 가지고 있을 경우를 대비한 실행 바이너리 생성
-            echo -e '#!/usr/bin/env python3\nimport sys\nfrom mkbootimg.mkbootimg import main\nif __name__ == "__main__":\n    main()' | sudo tee /usr/local/bin/mkbootimg > /dev/null
-            sudo chmod +x /usr/local/bin/mkbootimg
-          fi
+          # 3. Exec format error를 방지하기 위해 python3 쉬뱅(Shebang) 주입 후 실행 파일 생성
+          echo '#!/usr/bin/env python3' > ./mkbootimg
+          cat mkbootimg_src/mkbootimg.py >> ./mkbootimg
+          chmod +x ./mkbootimg
+          sudo mv ./mkbootimg /usr/local/bin/mkbootimg
+          
+          # 4. 의존성 모듈인 gki 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
+          SITE_PKG=$(python -c 'import site; print(site.getsitepackages()[0])')
+          sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
+          
+          # 5. 임시 파일 청소
+          rm -rf mkbootimg.tar.gz mkbootimg_src
 
       - name: Install mkdtboimg
         run: |
