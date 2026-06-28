@@ -46,10 +46,10 @@ jobs:
       - name: Download Google Clang Toolchain
         run: |
           mkdir -p $GITHUB_WORKSPACE/clang
-          # 안드로이드 16 커널 컴파일을 위한 공식 Google Clang 툴체인 다운로드
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz -O clang.tar.gz
-          tar -xzf clang.tar.gz -C $GITHUB_WORKSPACE/clang
-          rm -rf clang.tar.gz
+          # 안드로이드 16 빌드 규격과 호환되는 공식 안정판 LLVM Clang 툴체인 다운로드
+          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz -O clang.tar.xz
+          tar -xJf clang.tar.xz --strip-components=1 -C $GITHUB_WORKSPACE/clang
+          rm -rf clang.tar.xz
 
       - name: Clone LineageOS 23.2 Kernel Source
         run: |
