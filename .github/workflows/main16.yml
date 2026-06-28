@@ -87,17 +87,16 @@ jobs:
           export SUBARCH=arm64
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           
-          # 1. lse 에러 방지를 위해 아키텍처 타겟을 ARMv8.2-A로 승격 (-march=armv8.2-a)
-          # 2. void void 및 섹션 충돌 같은 구형 C 문법 오류 무시 플래그 대거 주입
-          # 3. Clang 16 이상 버전의 엄격한 타입 검사 무력화 (-Wno-error=...)
-          EXTRA_CFLAGS="-march=armv8.2-a -Wno-error -Wno-return-type -Wno-implicit-function-declaration -Wno-int-conversion -Wno-section -fpermissive"
+          # 인자 간 공백 꼬임을 막기 위해 따옴표 구조를 명확히 정의
+          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip"
           
-          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip KCFLAGS=${EXTRA_CFLAGS}"
+          # 구형 소스의 문법 오류와 LSE 에러를 강제 패스시키는 컴파일러 플래그 설정
+          export KCFLAGS="-march=armv8.2-a -Wno-error -Wno-return-type -Wno-implicit-function-declaration -Wno-int-conversion -Wno-section -fpermissive"
           
           # 1. Defconfig 구성 초기화
           make $MAKE_ARGS exynos9820_defconfig
           
-          # 2. 구형 코드 호환성을 위해 추가 설정 강제 보정 (오타 및 호환성 차단)
+          # 2. 구형 코드 호환성을 위해 경고-에러 전환 옵션 강제 제거
           sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' .config
           
           # 3. 컴파일 시작
