@@ -93,22 +93,26 @@ jobs:
         
       - name: Install mkbootimg
         run: |
-          # 1. 구조가 안정적인 Android 12 공식 태그에서 mkbootimg 소스 코드 다운로드
+          # 1. 안정적인 Android 12 릴리즈 태그에서 아카이브 다운로드
           wget -q https://android.googlesource.com/platform/system/tools/mkbootimg/+archive/refs/tags/android-12.1.0_r4.tar.gz -O mkbootimg.tar.gz
           
           # 2. 임시 폴더에 압축 해제
           mkdir -p mkbootimg_src
           tar -xzf mkbootimg.tar.gz -C mkbootimg_src
           
-          # 3. Exec format error를 방지하기 위해 python3 쉬뱅(Shebang) 주입 후 실행 파일 생성
+          # 3. python3 쉬뱅(Shebang) 주입 후 실행 파일 빌드 및 배치
           echo '#!/usr/bin/env python3' > ./mkbootimg
           cat mkbootimg_src/mkbootimg.py >> ./mkbootimg
           chmod +x ./mkbootimg
           sudo mv ./mkbootimg /usr/local/bin/mkbootimg
           
-          # 4. 의존성 모듈인 gki 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
+          # 4. 핵심 수정: gki 폴더가 존재하는 경우에만 복사하도록 예외 처리 적용
           SITE_PKG=$(python -c 'import site; print(site.getsitepackages()[0])')
-          sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
+          if [ -d "mkbootimg_src/gki" ]; then
+            sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
+          else
+            echo "안내: 해당 버전의 mkbootimg는 gki 모듈을 필요로 하지 않는 독립형 버전입니다."
+          fi
           
           # 5. 임시 파일 청소
           rm -rf mkbootimg.tar.gz mkbootimg_src
