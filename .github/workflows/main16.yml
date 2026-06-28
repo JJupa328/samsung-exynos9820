@@ -19,7 +19,12 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libtinfo-dev python3 wget curl tar
+          # 1. libncurses5 / libtinfo5 대신 우분투 24.04용 최신 6 버전 패키지로 대체하여 설치
+          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses6 libncurses-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo6 python3 wget curl tar
+          
+          # 2. 핵심 수정: 구형 빌드 도구 호환성을 위한 심볼릭 링크(Symbolic Link) 강제 생성
+          sudo ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5
+          sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5
           
       - name: Download Google Clang Toolchain
         run: |
