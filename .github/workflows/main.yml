@@ -93,34 +93,21 @@ jobs:
 
       - name: Install mkbootimg
         run: |
-          # 1. 작업용 디렉토리 생성
-          mkdir -p mkbootimg_src/gki
+          # 1. PyPI에서 공식 mkbootimg 패키지 및 종속성(gki) 초고속 설치
+          python3 -m pip install --upgrade pip
+          python3 -m pip install mkbootimg
           
-          # 2. GitHub AOSP 미러에서 mkbootimg 관련 파일 정밀 다운로드
-          curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/mkbootimg.py" -o mkbootimg_src/mkbootimg.py
-          curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/gki/gki.py" -o mkbootimg_src/gki/gki.py
-          curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg/gki/__init__.py" -o mkbootimg_src/gki/__init__.py
+          # 2. 설치된 패키지 위치 확인 후 /usr/local/bin/mkbootimg로 심볼릭 링크(연결) 생성
+          # 'mkbootimg' 명령어가 단일 실행 파일로 호출될 수 있도록 환경 보정
+          MKBOOTIMG_PATH=$(which mkbootimg || echo "$HOME/.local/bin/mkbootimg")
           
-          # 3. 만약 파일이 비어있다면 다른 경로 구조에서 예비 다운로드
-          if [ ! -s "mkbootimg_src/mkbootimg.py" ]; then
-            curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/mkbootimg.py" -o mkbootimg_src/mkbootimg.py
-            curl -sSL "https://raw.githubusercontent.com/aosp-mirror/platform_system_tools/main/gki.py" -o mkbootimg_src/gki/gki.py
+          if [ -f "$MKBOOTIMG_PATH" ]; then
+            sudo ln -sf "$MKBOOTIMG_PATH" /usr/local/bin/mkbootimg
+          else
+            # 만약 pip가 스크립트 형태로만 가지고 있을 경우를 대비한 실행 바이너리 생성
+            echo -e '#!/usr/bin/env python3\nimport sys\nfrom mkbootimg.mkbootimg import main\nif __name__ == "__main__":\n    main()' | sudo tee /usr/local/bin/mkbootimg > /dev/null
+            sudo chmod +x /usr/local/bin/mkbootimg
           fi
-          
-          # 4. 핵심 수정: Exec format error를 방지하기 위해 파일 맨 위에 python3 쉬뱅(Shebang) 선언 강제 주입
-          echo '#!/usr/bin/env python3' > ./mkbootimg
-          cat mkbootimg_src/mkbootimg.py >> ./mkbootimg
-          
-          # 5. 실행 권한 부여 및 시스템 경로 배치
-          chmod +x ./mkbootimg
-          sudo mv ./mkbootimg /usr/local/bin/mkbootimg
-          
-          # 6. gki 패키지 폴더를 파이썬 라이브러리 경로(site-packages)로 복사
-          SITE_PKG=$(python -c 'import site; print(site.getsitepackages()[0])')
-          sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
-          
-          # 7. 임시 파일 청소
-          rm -rf mkbootimg_src
 
       - name: Install mkdtboimg
         run: |
