@@ -8,7 +8,7 @@ N971N, N976B/N.
 
 ## Contributors
 
-- fart1-git - for removing vendor check of DP cables in DEX mode
+- fart1-git - for removing vendor check of DP cables in DE mode
 - NZNewbie - for adding fiops scheduler
 - ExtremeGrief - for overall improvements, porting maple scheduler
 - thehacker911 - overall improvements and advices
