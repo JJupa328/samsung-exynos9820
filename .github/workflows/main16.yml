@@ -104,19 +104,27 @@ jobs:
           export SUBARCH=arm64
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           
-          # 인자 간 공백 꼬임을 막기 위해 따옴표 구조를 명확히 정의
-          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip"
+          # ==== [소스 코드 자동 치유 및 오타 교정 단계] ====
           
-          # 구형 소스의 문법 오류와 LSE 에러를 강제 패스시키는 컴파일러 플래그 설정
+          # 1. nmi.h 파일의 치명적인 오타인 'void void'를 정상적인 'void'로 강제 수정
+          sed -i 's/static inline void void sl_softirq_entry/static inline void sl_softirq_entry/g' include/linux/nmi.h
+          
+          # 2. main.c 파일의 메모리 섹션 충돌 변수(__init_or_module)를 일반 전역 변수로 완화하여 충돌 제거
+          sed -i 's/static bool __init_or_module initcall_sec_debug/static bool initcall_sec_debug/g' init/main.c
+          
+          # =================================================
+          
+          # 인자 정의 및 LSE 오류 방지용 플래그 주입
+          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip"
           export KCFLAGS="-march=armv8.2-a -Wno-error -Wno-return-type -Wno-implicit-function-declaration -Wno-int-conversion -Wno-section -fpermissive"
           
           # 1. Defconfig 구성 초기화
           make $MAKE_ARGS exynos9820_defconfig
           
-          # 2. 구형 코드 호환성을 위해 경고-에러 전환 옵션 강제 제거
+          # 2. 경고-에러 전환 플래그 비활성화 보정
           sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' .config
           
-          # 3. 컴파일 시작
+          # 3. 최종 초고속 컴파일 시작
           make $MAKE_ARGS -j$(nproc)
 
       - name: Package Boot Image Artifacts
