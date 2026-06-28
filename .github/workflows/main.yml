@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        model: [ "G975N" ]
+        model: [ "G975F" ]
     steps:
       # 1. 외부 액션 버전 최신화 (v3 -> v4)
       - uses: actions/checkout@v6
