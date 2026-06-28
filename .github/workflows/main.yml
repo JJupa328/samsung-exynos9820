@@ -19,12 +19,16 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libtinfo-dev python3 wget curl tar
           
-      - name: Download Google Clang Toolchain
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/clang
-          # 안드로이드 16 공식 Clang 툴체인 안정화 빌드 다운로드
+          # 1. 우분투 24.04에 없는 libncurses5, libtinfo5를 목록에서 완전히 지우고 최신 6버전 패키지로 이름 자동 치환
+          DEBS="bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 wget curl tar libncurses6 libncurses-dev libtinfo6"
+          
+          # 2. 안전하게 의존성 패키지 설치 진행
+          sudo apt-get install -y $DEBS
+          
+          # 3. 구형 빌드 툴(Clang/GCC) 속이기용 가짜 링크(심볼릭 링크) 강제 생성
+          sudo ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5
+          sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5
           wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz -O clang.tar.gz
           tar -xzf clang.tar.gz -C $GITHUB_WORKSPACE/clang
           rm -rf clang.tar.gz
