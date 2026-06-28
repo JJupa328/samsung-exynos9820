@@ -104,23 +104,23 @@ jobs:
           export SUBARCH=arm64
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           
-          # ==== [배시 스크립트 충돌 방지용 안전한 코드 교정] ====
-          
+          # ==== [소스 코드 구조 결함 자동 교정 스크립트] ====
           # 1. nmi.h 오타 교정
           sed -i 's/static inline void void sl_softirq_entry/static inline void sl_softirq_entry/g' include/linux/nmi.h
           
           # 2. main.c 섹션 충돌 변수 완화
           sed -i 's/static bool __init_or_module initcall_sec_debug/static bool initcall_sec_debug/g' init/main.c
           
-          # 3. [완벽 수정] 따옴표 충돌을 막기 위해 16진수 문자 및 에코 덮어쓰기 방식으로 sec_debug.h 보정
-          # #define _SEC_DEBUG_H_ 문구 바로 아랫줄에 가짜 구조체를 안전하게 주입합니다.
-          sed -i '/#define _SEC_DEBUG_H_/a struct sec_debug_auto_comment { char dummy[4]; };' include/linux/sec_debug.h
-          
           # =================================================
           
           # 인자 정의 및 LSE 오류 방지용 플래그 주입
           MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip"
-          export KCFLAGS="-march=armv8.2-a -Wno-error -Wno-return-type -Wno-implicit-function-declaration -Wno-int-conversion -Wno-section -fpermissive"
+          
+          # [핵심 보정] -D"sec_debug_auto_comment=sec_debug_auto_comment { char d[4]; }; struct" 
+          # 이 매크로가 주입되면 컴파일러가 'struct sec_debug_auto_comment'를 만나는 순간 자동으로 정상적인 구조체로 확장하여 인식합니다.
+          COMPILER_FLAGS="-march=armv8.2-a -Wno-error -Wno-return-type -Wno-implicit-function-declaration -Wno-int-conversion -Wno-section -fpermissive -D\"sec_debug_auto_comment=sec_debug_auto_comment { char d[4]; }; struct\""
+          
+          export KCFLAGS="${COMPILER_FLAGS}"
           
           # 1. Defconfig 구성 초기화
           make $MAKE_ARGS exynos9820_defconfig
