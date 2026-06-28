@@ -15,7 +15,7 @@ jobs:
         model: [ "G975N" ]
     steps:
       # 1. 외부 액션 버전 최신화 (v3 -> v4)
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # 2. setup-python 버전 최신화 (v4 -> v5) 및 권장 버전 설정
       - uses: actions/setup-python@v5
@@ -43,7 +43,7 @@ jobs:
 
       # 4. cache 액션 버전 최신화 (v3 -> v4)
       - name: Cache ccache files
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.ccache
           key: ccache-${{ env.TOOLCHAIN }}-${{ steps.ccache_model_key.outputs.KEY }}-${{ steps.ccache_timestamp.outputs.FULL_DATE }}
