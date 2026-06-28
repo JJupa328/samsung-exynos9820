@@ -104,13 +104,16 @@ jobs:
           export SUBARCH=arm64
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           
-          # ==== [소스 코드 자동 치유 및 오타 교정 단계] ====
+          # ==== [소스 코드 자동 치유 및 구조체 누락 교정] ====
           
           # 1. nmi.h 파일의 치명적인 오타인 'void void'를 정상적인 'void'로 강제 수정
           sed -i 's/static inline void void sl_softirq_entry/static inline void sl_softirq_entry/g' include/linux/nmi.h
           
-          # 2. main.c 파일의 메모리 섹션 충돌 변수(__init_or_module)를 일반 전역 변수로 완화하여 충돌 제거
+          # 2. main.c 파일의 메모리 섹션 충돌 변수 제거
           sed -i 's/static bool __init_or_module initcall_sec_debug/static bool initcall_sec_debug/g' init/main.c
+          
+          # 3. [핵심 수정] sec_debug.h 상단에 누락된 struct sec_debug_auto_comment 공백 구조체를 강제로 선언하여 컴파일 에러 차단
+          sed -i '/#define _SEC_DEBUG_H_/a struct sec_debug_auto_comment { char Dummy[4]; };' include/linux/sec_debug.h
           
           # =================================================
           
@@ -122,10 +125,7 @@ jobs:
           make $MAKE_ARGS exynos9820_defconfig
           
           # 2. 경고-에러 전환 플래그 비활성화 보정
-          sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' .config
-          
-          # 3. 최종 초고속 컴파일 시작
-          make $MAKE_ARGS -j$(nproc)
+          sed -i 's/CONFIG_CC_
 
       - name: Package Boot Image Artifacts
         run: |
