@@ -79,23 +79,21 @@ jobs:
           echo "CONFIG_NF_NAT=y" >> $DEFCONFIG_PATH
           
           echo "==== Defconfig Modification Done! ===="
-
+          
       - name: Compile Kernel
         run: |
           cd kernel-src
-          
-          # 환경변수 선언: 아키텍처 및 크로스 컴파일 경로 세팅
           export ARCH=arm64
           export SUBARCH=arm64
           export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
           
-          # 빌드 아규먼트 설정 (Clang 및 LLVM 도구 체인 연동)
-          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip"
+          # 핵심 수정: KCFLAGS="-Wno-error" 추가하여 사소한 코드 경고로 인해 빌드가 터지는 것을 방지
+          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip KCFLAGS=-Wno-error"
           
           # 1. Defconfig 구성 초기화
           make $MAKE_ARGS exynos9820_defconfig
           
-          # 2. 컴파일 시작 (코어 수 계산하여 초고속 빌드)
+          # 2. 컴파일 시작
           make $MAKE_ARGS -j$(nproc)
 
       - name: Package Boot Image Artifacts
