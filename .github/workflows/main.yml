@@ -93,10 +93,22 @@ jobs:
 
       - name: Install mkbootimg
         run: |
-          wget -q https://android.googlesource.com/platform/system/tools/mkbootimg/+archive/refs/heads/master.tar.gz -O - | tar xzf - mkbootimg.py gki
+          # 1. master 대신 최신 main 브랜치 아카이브 다운로드
+          wget -q https://android.googlesource.com/platform/system/tools/mkbootimg/+archive/refs/heads/main.tar.gz -O mkbootimg.tar.gz
+          
+          # 2. 압축을 해제하고 필요한 폴더/파일 추출
+          tar -xzf mkbootimg.tar.gz mkbootimg/gki.py mkbootimg/mkbootimg.py
+          
+          # 3. 바뀐 내부 경로에서 실행 파일 꺼내와 권한 및 위치 조정
+          mv mkbootimg/mkbootimg.py ./mkbootimg.py
           chmod +x mkbootimg.py
           sudo mv mkbootimg.py /usr/local/bin/mkbootimg
-          sudo mv gki $(python -c 'import site; print(site.getsitepackages()[0])')
+          
+          # 4. gki 패키지를 파이썬 사이트 패키지 경로로 이동
+          sudo mv mkbootimg/gki.py $(python -c 'import site; print(site.getsitepackages()[0])')/gki.py
+          
+          # 5. 임시 정리
+          rm -rf mkbootimg.tar.gz mkbootimg
 
       - name: Install mkdtboimg
         run: |
