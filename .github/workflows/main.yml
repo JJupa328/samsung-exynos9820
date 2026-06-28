@@ -1,166 +1,112 @@
-name: Build
+name: Build Android 16 LineageOS Docker Kernel
 
-on: [push]
-
-env:
-  TOOLCHAIN: cruel
-  INSTALLER: yes
+on:
+  workflow_dispatch: # 깃허브 웹에서 수동으로 빌드 버튼을 누를 수 있게 합니다.
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        model: [ "G975F" ]
+  build-kernel:
+    runs-on: ubuntu-latest
     steps:
-      # 1. 외부 액션 버전 최신화
-      - uses: actions/checkout@v4
-
-      # 2. setup-python 설정 및 버전 명시
-      - uses: actions/setup-python@v5
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
         with:
-          python-version: '3.10'
+          root-reserve-mb: 2048
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
 
-      - name: Install dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: sudo apt-get install -y -qq libtinfo5 ccache
-
-      - name: Disable compression in ccache and set ccache path
-        run: ccache -o compression=false -o cache_dir=$HOME/.ccache
-
-      # 3. set-output 대체 문법 ($GITHUB_OUTPUT)
-      - name: Prepare ccache timestamp
-        id: ccache_timestamp
+      - name: Install Dependencies
         run: |
-          echo "FULL_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-          echo "MONTH_DATE=$(date +'%Y-%m')" >> $GITHUB_OUTPUT
-
-      - name: Create cache key from ${{ matrix.model }}
-        id: ccache_model_key
-        run: echo "KEY=$( echo ${{ matrix.model }} | tr ',' '_' )" >> $GITHUB_OUTPUT
-
-      # 4. cache 액션 v4 적용
-      - name: Cache ccache files
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-${{ env.TOOLCHAIN }}-${{ steps.ccache_model_key.outputs.KEY }}-${{ steps.ccache_timestamp.outputs.FULL_DATE }}
-          restore-keys: |
-            ccache-${{ env.TOOLCHAIN }}-${{ steps.ccache_model_key.outputs.KEY }}-${{ steps.ccache_timestamp.outputs.MONTH_DATE }}
-            ccache-${{ env.TOOLCHAIN }}-${{ steps.ccache_model_key.outputs.KEY }}-
-            ccache-${{ env.TOOLCHAIN }}-
-
-      # 5. 핵심 수정: 빌드 에러를 유발하는 구버전 Magisk 자동 주입 기능 비활성화 (-magisk)
-      - name: Kernel Configure
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5 libtinfo-dev python3 wget curl tar
+          
+      - name: Download Google Clang Toolchain
         run: |
-          set -e -o pipefail
-          ./cruelbuild config                    \
-                       model=${{ matrix.model }} \
-                       name="Cruel-devel"        \
-                       toolchain=$TOOLCHAIN      \
-                       -magisk                   \
-                       +nohardening              \
-                       +ttl                      \
-                       +wireguard                \
-                       +cifs                     \
-                       +sdfat                    \
-                       +ntfs                     \
-                       +force_dex_wqhd           \
-                       +morosound                \
-                       +boeffla_wl_blocker       \
-          2>&1 | tee config.info
+          mkdir -p $GITHUB_WORKSPACE/clang
+          # 안드로이드 16 커널 컴파일을 위한 공식 Google Clang 툴체인 다운로드
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz -O clang.tar.gz
+          tar -xzf clang.tar.gz -C $GITHUB_WORKSPACE/clang
+          rm -rf clang.tar.gz
 
-      - name: Install gcc-aarch64-linux-gnu
-        if: env.TOOLCHAIN == 'system-gcc' || env.TOOLCHAIN == 'system-clang'
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: sudo apt-get install -y -qq gcc-aarch64-linux-gnu
-
-      - name: Install clang
-        if: env.TOOLCHAIN == 'system-clang'
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: sudo apt-get install -y -qq llvm lld clang
-
-      - name: Deploy Toolchain
-        if: env.TOOLCHAIN != 'system-gcc' && env.TOOLCHAIN != 'system-clang'
-        run: git clone --depth 1 -j $(nproc) --branch $TOOLCHAIN --single-branch https://github.com/CruelKernel/samsung-exynos9820-toolchain toolchain
-
-      - name: Kernel Build
-        run: ./cruelbuild :build
-        
-      - name: Install mkbootimg
+      - name: Clone LineageOS 23.2 Kernel Source
         run: |
-          # 1. 안정적인 Android 12 릴리즈 태그에서 아카이브 다운로드
-          wget -q https://android.googlesource.com/platform/system/tools/mkbootimg/+archive/refs/tags/android-12.1.0_r4.tar.gz -O mkbootimg.tar.gz
+          # 갤럭시 S10+ 엑시노스 9820 공식 리니지OS 23.2 브랜치 클론
+          git clone https://github.com/LineageOS/android_kernel_samsung_exynos9820.git -b lineage-23.2 --depth=1 kernel-src
+
+      - name: Inject Docker Config Flags
+        run: |
+          cd kernel-src
+          DEFCONFIG_PATH="arch/arm64/configs/exynos9820_defconfig"
           
-          # 2. 임시 폴더에 압축 해제
-          mkdir -p mkbootimg_src
-          tar -xzf mkbootimg.tar.gz -C mkbootimg_src
+          echo "==== Injecting Docker Required Defconfig Flags ===="
           
-          # 3. python3 쉬뱅(Shebang) 주입 후 실행 파일 빌드 및 배치
-          echo '#!/usr/bin/env python3' > ./mkbootimg
-          cat mkbootimg_src/mkbootimg.py >> ./mkbootimg
-          chmod +x ./mkbootimg
-          sudo mv ./mkbootimg /usr/local/bin/mkbootimg
+          # 네임스페이스 및 기기 제어 (도커 필수)
+          echo "CONFIG_NAMESPACES=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NET_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_PID_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_IPC_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_UTS_NS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_USER_NS=y" >> $DEFCONFIG_PATH
           
-          # 4. 핵심 수정: gki 폴더가 존재하는 경우에만 복사하도록 예외 처리 적용
-          SITE_PKG=$(python -c 'import site; print(site.getsitepackages()[0])')
-          if [ -d "mkbootimg_src/gki" ]; then
-            sudo cp -r mkbootimg_src/gki "$SITE_PKG/"
-          else
-            echo "안내: 해당 버전의 mkbootimg는 gki 모듈을 필요로 하지 않는 독립형 버전입니다."
+          # 제어 그룹 (CGroups) 가상화 관련
+          echo "CONFIG_CGROUPS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_CPUACCT=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_DEVICE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_FREEZER=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CGROUP_SCHED=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_CPUSETS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_MEMCG=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_MEMCG_SWAP=y" >> $DEFCONFIG_PATH
+          
+          # 스토리지 아키텍처 및 네트워크 가상화
+          echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_VETH=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_BRIDGE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_KEYS=y" >> $DEFCONFIG_PATH
+          
+          # 방화벽 및 네트워크 패킷 필터링 (iptables / 마스커레이드)
+          echo "CONFIG_IP_NF_FILTER=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_IP_NF_TARGET_MASQUERADE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NETFILTER_XT_MATCH_COMMENT=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_NF_NAT=y" >> $DEFCONFIG_PATH
+          
+          echo "==== Defconfig Modification Done! ===="
+
+      - name: Compile Kernel
+        run: |
+          cd kernel-src
+          
+          # 환경변수 선언: 아키텍처 및 크로스 컴파일 경로 세팅
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
+          
+          # 빌드 아규먼트 설정 (Clang 및 LLVM 도구 체인 연동)
+          MAKE_ARGS="ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip"
+          
+          # 1. Defconfig 구성 초기화
+          make $MAKE_ARGS exynos9820_defconfig
+          
+          # 2. 컴파일 시작 (코어 수 계산하여 초고속 빌드)
+          make $MAKE_ARGS -j$(nproc)
+
+      - name: Package Boot Image Artifacts
+        run: |
+          mkdir -p output
+          # 빌드가 성공하면 나오는 핵심 바이너리 추출
+          cp kernel-src/arch/arm64/boot/Image output/boot.img
+          if [ -f "kernel-src/arch/arm64/boot/dts/exynos/exynos9820.dtbo" ]; then
+            cp kernel-src/arch/arm64/boot/dts/exynos/exynos9820.dtbo output/dtbo.img
           fi
           
-          # 5. 임시 파일 청소
-          rm -rf mkbootimg.tar.gz mkbootimg_src
+          cd output
+          tar -cvf docker-kernel-beyond2lte.tar boot.img $(ls dtbo.img 2>/dev/null)
 
-      - name: Install mkdtboimg
-        run: |
-          wget -q https://android.googlesource.com/platform/system/libufdt/+archive/refs/heads/master.tar.gz -O - | tar --strip-components 2 -xzf - utils/src/mkdtboimg.py
-          chmod +x mkdtboimg.py
-          sudo mv mkdtboimg.py /usr/local/bin/mkdtboimg
-
-      - name: Install avbtool
-        run: |
-          wget -q https://android.googlesource.com/platform/external/avb/+archive/refs/heads/master.tar.gz -O - | tar xzf - avbtool.py
-          chmod +x avbtool.py
-          sudo mv avbtool.py /usr/local/bin/avbtool
-
-      - name: Create CruelKernel images for ${{ matrix.model }}
-        run: ./cruelbuild :mkimg
-
-      - name: Create CruelKernel installer for ${{ matrix.model }}
-        if: env.INSTALLER == 'yes'
-        run: ./cruelbuild :pack
-
-      - name: Avoid Double Zipping in Installer
-        if: env.INSTALLER == 'yes'
-        run: |
-          mkdir -p installer && cd installer
-          unzip ../CruelKernel.zip
-
-      - name: Upload Kernel Zip
-        if: env.INSTALLER == 'yes'
+      - name: Upload Kernel Tar to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CruelKernel-${{ matrix.model }}
-          path: installer/*
-          if-no-files-found: error
-
-      - name: Upload Kernel Images
-        if: env.INSTALLER != 'yes'
-        uses: actions/upload-artifact@v4
-        with:
-          name: CruelKernel-${{ matrix.model }}
-          path: '*.img'
-          if-no-files-found: error
-
-      - name: Upload Kernel Info
-        uses: actions/upload-artifact@v4
-        with:
-          name: ConfigurationInfo-${{ matrix.model }}
-          path: config.*
-          if-no-files-found: error
+          name: Docker-Kernel-Lineage23.2
+          path: output/docker-kernel-beyond2lte.tar
